@@ -15,15 +15,15 @@ const GUILD_ID = process.env.GUILD_ID;
 
 // Mapeie os nomes exatos dos seus canais de voz
 const CHANNEL_NAMES = {
-  PARTY_MAIN:    'PARTY MAIN',
-  LIDER_SW1:     'LIDER SWITCH 1',
-  LIDER_SW2:     'LIDER SWITCH 2',
-  LIDER_PARTY:   'LIDER PARTY',
-  PARTY_SW1:     'PARTY SWITCH 1',
-  PARTY_SW2:     'PARTY SWITCH 2',
-  PARTY3:        'PARTY 3',
-  PARTY4:        'PARTY 4',
-  PARTY5:        'PARTY 5',
+  PARTY_MAIN:  'PARTY MAIN',
+  LIDER_SW1:   'LIDER SWITCH 1',
+  LIDER_SW2:   'LIDER SWITCH 2',
+  LIDER_PARTY: 'LIDER PARTY',
+  PARTY_SW1:   'PARTY SWITCH 1',
+  PARTY_SW2:   'PARTY SWITCH 2',
+  PARTY3:      'PARTY 3',
+  PARTY4:      'PARTY 4',
+  PARTY5:      'PARTY 5',
 };
 
 // Regras: quem fala em X → bot retransmite para Y
