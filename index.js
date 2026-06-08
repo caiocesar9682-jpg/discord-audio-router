@@ -3,17 +3,14 @@ const {
   joinVoiceChannel,
   createAudioPlayer,
   createAudioResource,
-  getVoiceConnection,
-  VoiceConnectionStatus,
-  AudioReceiveStream,
   EndBehaviorType,
+  NoSubscriberBehavior,
 } = require('@discordjs/voice');
-const { PassThrough } = require('stream');
+const { pipeline } = require('stream');
 
 const TOKEN = process.env.TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 
-// Mapeie os nomes exatos dos seus canais de voz
 const CHANNEL_NAMES = {
   PARTY_MAIN:  'PARTY MAIN',
   LIDER_SW1:   'LIDER SWITCH 1',
@@ -26,7 +23,6 @@ const CHANNEL_NAMES = {
   PARTY5:      'PARTY 5',
 };
 
-// Regras: quem fala em X → bot retransmite para Y
 const ROUTING = {
   PARTY_MAIN:  ['LIDER_SW1', 'LIDER_SW2', 'LIDER_PARTY'],
   PARTY_SW1:   ['LIDER_SW1'],
@@ -37,57 +33,90 @@ const ROUTING = {
 };
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+  ],
 });
 
 client.once('ready', async () => {
-  console.log(`Bot online: ${client.user.tag}`);
-  const guild = client.guilds.cache.get(GUILD_ID);
-  const channels = {};
+  console.log(`✅ Bot online: ${client.user.tag}`);
 
-  // Encontra todos os canais pelo nome
+  const guild = await client.guilds.fetch(GUILD_ID);
+  await guild.channels.fetch();
+
+  const channels = {};
   for (const [key, name] of Object.entries(CHANNEL_NAMES)) {
     channels[key] = guild.channels.cache.find(
       c => c.name === name && c.isVoiceBased()
     );
-    if (!channels[key]) console.warn(`Canal não encontrado: ${name}`);
+    if (!channels[key]) console.warn(`⚠️ Canal não encontrado: ${name}`);
+    else console.log(`📢 Canal encontrado: ${name}`);
   }
 
-  // Conecta o bot em todos os canais
   const connections = {};
   for (const [key, channel] of Object.entries(channels)) {
     if (!channel) continue;
-    connections[key] = joinVoiceChannel({
-      channelId: channel.id,
-      guildId: GUILD_ID,
-      adapterCreator: guild.voiceAdapterCreator,
-      selfDeaf: false,
-      selfMute: false,
-    });
-    console.log(`Conectado em: ${channel.name}`);
+    try {
+      connections[key] = joinVoiceChannel({
+        channelId: channel.id,
+        guildId: GUILD_ID,
+        adapterCreator: guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false,
+      });
+      console.log(`🔗 Conectado em: ${channel.name}`);
+    } catch (e) {
+      console.error(`❌ Erro ao conectar em ${channel.name}:`, e);
+    }
   }
 
-  // Configura o roteamento de áudio
+  // Aguarda 3 segundos para todas as conexões estabilizarem
+  await new Promise(r => setTimeout(r, 3000));
+
   for (const [sourceKey, destKeys] of Object.entries(ROUTING)) {
     const sourceConn = connections[sourceKey];
-    if (!sourceConn) continue;
+    if (!sourceConn) {
+      console.warn(`⚠️ Conexão não encontrada para: ${sourceKey}`);
+      continue;
+    }
+
+    console.log(`🎙️ Monitorando áudio em: ${CHANNEL_NAMES[sourceKey]}`);
 
     sourceConn.receiver.speaking.on('start', (userId) => {
-      const audioStream = sourceConn.receiver.subscribe(userId, {
-        end: { behavior: EndBehaviorType.AfterSilence, duration: 500 },
-      });
+      console.log(`🗣️ Alguém falou em ${CHANNEL_NAMES[sourceKey]} (userId: ${userId})`);
 
-      for (const destKey of destKeys) {
-        const destConn = connections[destKey];
-        if (!destConn) continue;
+      try {
+        const audioStream = sourceConn.receiver.subscribe(userId, {
+          end: {
+            behavior: EndBehaviorType.AfterSilence,
+            duration: 1000,
+          },
+        });
 
-        const player = createAudioPlayer();
-        const resource = createAudioResource(audioStream);
-        destConn.subscribe(player);
-        player.play(resource);
+        for (const destKey of destKeys) {
+          const destConn = connections[destKey];
+          if (!destConn) continue;
+
+          try {
+            const player = createAudioPlayer({
+              behaviors: { noSubscriber: NoSubscriberBehavior.Play },
+            });
+            const resource = createAudioResource(audioStream);
+            destConn.subscribe(player);
+            player.play(resource);
+            console.log(`📡 Retransmitindo de ${CHANNEL_NAMES[sourceKey]} → ${CHANNEL_NAMES[destKey]}`);
+          } catch (e) {
+            console.error(`❌ Erro ao retransmitir para ${destKey}:`, e);
+          }
+        }
+      } catch (e) {
+        console.error(`❌ Erro ao capturar áudio de ${sourceKey}:`, e);
       }
     });
   }
+
+  console.log('🚀 Sistema de roteamento de áudio ativo!');
 });
 
 client.login(TOKEN);
